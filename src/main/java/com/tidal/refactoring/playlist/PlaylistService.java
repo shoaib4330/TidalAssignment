@@ -13,6 +13,8 @@ import org.apache.commons.collections4.list.SetUniqueList;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class PlaylistService {
     private static final Integer PLAYLIST_MAX_SIZE = 500;
@@ -32,6 +34,7 @@ public class PlaylistService {
 
         if (StringUtils.isEmpty(uuid))
             throw new ValidationException("uuid must not be null or empty");
+
         if (CollectionUtils.isEmpty(tracksToAdd))
             throw new ValidationException("tracksToAdd must not be null or empty");
 
@@ -76,6 +79,7 @@ public class PlaylistService {
             toIndex++;
         }
 
+        /* Reassign indices to the tracks in playlist */
         Integer indexInPlaylist = 0;
         for (PlaylistTrack track : original) {
             track.setIndex(indexInPlaylist++);
@@ -97,8 +101,56 @@ public class PlaylistService {
      */
     public List<PlaylistTrack> removeTracks(String uuid, List<Integer> indexes)
             throws PlaylistException {
-        // TODO
-        return Collections.EMPTY_LIST;
+
+        if (StringUtils.isEmpty(uuid))
+            throw new ValidationException("uuid must not be null or empty");
+
+        if (CollectionUtils.isEmpty(indexes))
+            throw new ValidationException("indexes must not be null or empty");
+
+        Playlist playList =
+                playlistRepository
+                        .getPlaylistByUUID(uuid)
+                        .orElseThrow(() -> new PlaylistException("Playlist not found"));
+
+        /* Validate indices */
+        indexes.forEach(
+                index -> {
+                    if (!validateIndexes(index, playList.getNrOfTracks())) {
+                        throw new PlaylistException("Index out of bounds");
+                    }
+                });
+
+        Set<PlaylistTrack> tracksOfPlaylist = SetUtils.emptyIfNull(playList.getPlaylistTracks());
+
+        /* Gather all tracks to be removed. Time complexity O(N*W) */
+        Set<PlaylistTrack> tracksToRemove =
+                playList.getPlaylistTracks().stream()
+                        .filter(playlistTrack -> indexes.contains(playlistTrack.getIndex()))
+                        .collect(Collectors.toSet());
+
+        tracksToRemove.forEach(
+                removableTrack -> {
+                    /* O(1) operations since its HashSet */
+                    tracksOfPlaylist.remove(removableTrack);
+                    /* Remove track duration from overall playlist duration */
+                    playList.setDuration(
+                            removeTrackDurationFromPlaylist(playList, removableTrack.getTrack()));
+                });
+
+        /* sorting the tracks of playlist. Overall nlog(n) complexity */
+        Set<PlaylistTrack> sortedTracks = new TreeSet<>(tracksOfPlaylist);
+
+        /* Assign indices again. O(n) */
+        Integer plIndex = 0;
+        for (PlaylistTrack plTrack : sortedTracks) {
+            plTrack.setIndex(plIndex++);
+        }
+
+        playList.setPlaylistTracks(new HashSet<>(sortedTracks));
+        playList.setNrOfTracks(tracksOfPlaylist.size());
+
+        return new ArrayList<>(sortedTracks);
     }
 
     private boolean validateIndexes(int toIndex, int length) {
@@ -108,5 +160,10 @@ public class PlaylistService {
     private float addTrackDurationToPlaylist(Playlist playList, Track track) {
         return (track != null ? track.getDuration() : 0)
                 + (playList != null && playList.getDuration() != null ? playList.getDuration() : 0);
+    }
+
+    private float removeTrackDurationFromPlaylist(Playlist playList, Track track) {
+        return (playList != null && playList.getDuration() != null ? playList.getDuration() : 0)
+                - (track != null ? track.getDuration() : 0);
     }
 }

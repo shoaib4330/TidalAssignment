@@ -419,7 +419,35 @@ public class PlaylistServiceTest {
                 playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TO_INDEX);
 
         /* Assertions */
-        assertTrue(1 == addedTracks.get(0).getIndex());
+        assertTrue(ADD_TO_INDEX == addedTracks.get(0).getIndex());
         Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
+
+    /* ############ RemoveTracks Unit Tests ########
+     * ###############################################
+     * #################################################
+     * */
+//    @Test
+//    public void removeTracksRemovesTheTrackFromThePlaylist() {
+//        return;
+//    }
+
+    @Test
+    public void removeTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
+        List<Track> trackList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
+
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                PlaylistException.class,
+                () -> playlistService.removeTracks(PLAYLIST_UUID, Collections.singletonList(1)));
     }
 }
