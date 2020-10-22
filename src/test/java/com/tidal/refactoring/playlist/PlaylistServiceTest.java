@@ -7,6 +7,7 @@ import com.tidal.refactoring.playlist.exception.PlaylistException;
 import com.tidal.refactoring.playlist.interfaces.PlaylistRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.platform.commons.util.CollectionUtils;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -19,380 +20,406 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 
+/* Business Rules:
+- Playlist by UUID should exist in the database, else throws exception
+- Playlist cannot contain more than 500 tracks
+- If toIndex:
+        - is -1, adds tracks to the end of the list
+        - is > playlistSize(), adds tracks to the end of the list
+- If validateIndexes(a, b) == false, throws PlaylistException
+- Playlist should have updated duration
+- Verify the indexes of newly added tracks
+ */
+
 @ExtendWith(MockitoExtension.class)
 public class PlaylistServiceTest {
 
-  private static final String PLAYLIST_UUID = "ea23cd43ekdo30cm54jxvf93";
-  private static final String PLAYLIST_NAME = "The Test Playlist Name";
-  private static final LocalDate PLAYLIST_DATE = LocalDate.now();
+    private static final String PLAYLIST_UUID = "ea23cd43ekdo30cm54jxvf93";
+    private static final String PLAYLIST_NAME = "The Test Playlist Name";
+    private static final LocalDate PLAYLIST_DATE = LocalDate.now();
 
-  private static final LocalDate CURRENT_DATE = LocalDate.now();
+    private static final LocalDate CURRENT_DATE = LocalDate.now();
 
-  private static final Integer TO_INDEX = 1;
-  private static final Integer TRACK_ID = 1;
-  private static final String TRACK_TITLE = "Track 1";
-  private static final Integer ARTIST_ID = 1;
+    private static final Integer TO_INDEX = 1;
+    private static final Integer TRACK_ID = 1;
+    private static final String TRACK_TITLE = "Track 1";
+    private static final Integer ARTIST_ID = 1;
 
-  @InjectMocks private PlaylistService playlistService;
+    @InjectMocks private PlaylistService playlistService;
 
-  @Mock private PlaylistRepository playlistRepository;
+    @Mock private PlaylistRepository playlistRepository;
 
-  @Test
-  public void addTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
-    List<Track> trackList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID)
-                .title(TRACK_TITLE)
-                .duration(60.00f)
-                .artistId(ARTIST_ID)
-                .build());
+    @Test
+    public void addTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
+        List<Track> trackList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    Mockito.when(playlistRepository.getPlaylistByUUID(anyString())).thenReturn(Optional.empty());
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.empty());
 
-    assertThrows(
-        PlaylistException.class,
-        () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
-  }
+        assertThrows(
+                PlaylistException.class,
+                () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
+    }
 
-  @Test
-  public void addTracksShouldThrowExceptionWhenPlaylistExceeds500Tracks() {
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .playlistTracks(new HashSet<>())
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(500)
-            .deleted(false)
-            .duration(3000.00f)
-            .build();
+    @Test
+    public void addTracksShouldThrowExceptionWhenPlaylistExceeds500Tracks() {
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .playlistTracks(new HashSet<>())
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(500)
+                        .deleted(false)
+                        .duration(3000.00f)
+                        .build();
 
-    List<Track> trackList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID)
-                .title(TRACK_TITLE)
-                .duration(60.00f)
-                .artistId(ARTIST_ID)
-                .build());
+        List<Track> trackList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    assertThrows(
-        PlaylistException.class,
-        () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
+        assertThrows(
+                PlaylistException.class,
+                () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
 
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 
-  @Test
-  public void testAddTracks() {
-    List<Track> trackList = new ArrayList<Track>();
+    @Test
+    public void addTracksAddsTrackToThePlaylist() {
+        Track track = Track.builder().id(76868).title("A brand new track").artistId(4).build();
+        List<Track> trackList = Collections.singletonList(track);
 
-    Track track = new Track();
-    track.setArtistId(4);
-    track.setTitle("A brand new track");
-    track.setId(76868);
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.of(Playlist.builder().build()));
 
-    trackList.add(track);
+        List<PlaylistTrack> playlistTracks =
+                playlistService.addTracks(UUID.randomUUID().toString(), trackList, 5);
 
-    Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
-        .thenReturn(Optional.of(new Playlist()));
+        assertTrue(playlistTracks.size() > 0);
+    }
 
-    List<PlaylistTrack> playlistTracks =
-        playlistService.addTracks(UUID.randomUUID().toString(), trackList, 5);
+    /*
+    Verify: When Index is -1, track is added at the end of playlist
+     */
+    @Test
+    public void addTracksPutsTrackAtPlaylistEndWhenIndexIsMinusOne() {
+        Integer MINUS_ONE_TO_INDEX = -1;
+        Integer PLAYLIST_TRACK_ID_ONE = 10;
+        Integer PLAYLIST_TRACK_ID_TWO = 11;
+        Integer TRACK_ID_ONE = 1;
+        Integer TRACK_ID_TWO = 2;
 
-    assertTrue(playlistTracks.size() > 0);
-  }
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(2)
+                        .deleted(false)
+                        .duration(120.00f)
+                        .build();
 
-  /*
-  Verify: When Index is -1, track is added at the end of playlist
-   */
-  @Test
-  public void addTracksPutsTrackAtPlaylistEndWhenIndexIsMinusOne() {
-    Integer MINUS_ONE_TO_INDEX = -1;
-    Integer PLAYLIST_TRACK_ID_ONE = 10;
-    Integer PLAYLIST_TRACK_ID_TWO = 11;
-    Integer TRACK_ID_ONE = 1;
-    Integer TRACK_ID_TWO = 2;
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .id(PLAYLIST_TRACK_ID_ONE)
+                                        .trackId(TRACK_ID_ONE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_ONE).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .id(PLAYLIST_TRACK_ID_TWO)
+                                        .trackId(TRACK_ID_TWO)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_TWO).build())
+                                        .playlist(playlist)
+                                        .build()));
 
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(2)
-            .deleted(false)
-            .duration(120.00f)
-            .build();
+        playlist.setPlaylistTracks(playlistTracks);
 
-    Set<PlaylistTrack> playlistTracks =
-        new HashSet<>(
-            Arrays.asList(
-                PlaylistTrack.builder()
-                    .id(PLAYLIST_TRACK_ID_ONE)
-                    .trackId(TRACK_ID_ONE)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_ONE).build())
-                    .playlist(playlist)
-                    .build(),
-                PlaylistTrack.builder()
-                    .id(PLAYLIST_TRACK_ID_TWO)
-                    .trackId(TRACK_ID_TWO)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_TWO).build())
-                    .playlist(playlist)
-                    .build()));
+        List<Track> addList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    playlist.setPlaylistTracks(playlistTracks);
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    List<Track> addList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID)
-                .title(TRACK_TITLE)
-                .duration(60.00f)
-                .artistId(ARTIST_ID)
-                .build());
+        /* Actual calls */
+        List<PlaylistTrack> addedTracks =
+                playlistService.addTracks(PLAYLIST_UUID, addList, MINUS_ONE_TO_INDEX);
 
-    /* Configure mocks */
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        /* Assertions */
+        assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 
-    /* Actual calls */
-    List<PlaylistTrack> addedTracks =
-        playlistService.addTracks(PLAYLIST_UUID, addList, MINUS_ONE_TO_INDEX);
+    /*
+    Verify: When Index is greater than playlist size , track is added at the end of playlist
+     */
+    @Test
+    public void addTracksPutsTrackAtPlaylistEndWhenIndexGreaterThanPlaylistSize() {
+        Integer HIGH_TO_INDEX = 99;
+        Integer PLAYLIST_TRACK_ID_ONE = 10;
+        Integer PLAYLIST_TRACK_ID_TWO = 11;
+        Integer TRACK_ID_ONE = 1;
+        Integer TRACK_ID_TWO = 2;
 
-    /* Assertions */
-    assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(2)
+                        .deleted(false)
+                        .duration(120.00f)
+                        .build();
 
-  /*
-  Verify: When Index is greater than playlist size , track is added at the end of playlist
-   */
-  @Test
-  public void addTracksPutsTrackAtPlaylistEndWhenIndexGreaterThanPlaylistSize() {
-    Integer HIGH_TO_INDEX = 99;
-    Integer PLAYLIST_TRACK_ID_ONE = 10;
-    Integer PLAYLIST_TRACK_ID_TWO = 11;
-    Integer TRACK_ID_ONE = 1;
-    Integer TRACK_ID_TWO = 2;
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .id(PLAYLIST_TRACK_ID_ONE)
+                                        .trackId(TRACK_ID_ONE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_ONE).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .id(PLAYLIST_TRACK_ID_TWO)
+                                        .trackId(TRACK_ID_TWO)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_TWO).build())
+                                        .playlist(playlist)
+                                        .build()));
 
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(2)
-            .deleted(false)
-            .duration(120.00f)
-            .build();
+        playlist.setPlaylistTracks(playlistTracks);
 
-    Set<PlaylistTrack> playlistTracks =
-        new HashSet<>(
-            Arrays.asList(
-                PlaylistTrack.builder()
-                    .id(PLAYLIST_TRACK_ID_ONE)
-                    .trackId(TRACK_ID_ONE)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_ONE).build())
-                    .playlist(playlist)
-                    .build(),
-                PlaylistTrack.builder()
-                    .id(PLAYLIST_TRACK_ID_TWO)
-                    .trackId(TRACK_ID_TWO)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_TWO).build())
-                    .playlist(playlist)
-                    .build()));
+        List<Track> addList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    playlist.setPlaylistTracks(playlistTracks);
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    List<Track> addList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID)
-                .title(TRACK_TITLE)
-                .duration(60.00f)
-                .artistId(ARTIST_ID)
-                .build());
+        /* Actual calls */
+        List<PlaylistTrack> addedTracks =
+                playlistService.addTracks(PLAYLIST_UUID, addList, HIGH_TO_INDEX);
 
-    /* Configure mocks */
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        /* Assertions */
+        assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 
-    /* Actual calls */
-    List<PlaylistTrack> addedTracks =
-        playlistService.addTracks(PLAYLIST_UUID, addList, HIGH_TO_INDEX);
+    /*
+    Verify: When Index is out of bounds , throws playlist exception
+     */
+    @Test
+    public void addTracksThrowsPlaylistExceptionWhenIndexIsOutOfBounds() {
+        Integer OUT_OF_BOUNDS_INDEX = -12;
 
-    /* Assertions */
-    assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .playlistTrack(PlaylistTrack.builder().build())
+                        .playlistTrack(PlaylistTrack.builder().build())
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(2)
+                        .deleted(false)
+                        .duration(120.00f)
+                        .build();
 
-  /*
-  Verify: When Index is out of bounds , throws playlist exception
-   */
-  @Test
-  public void addTracksThrowsPlaylistExceptionWhenIndexIsOutOfBounds() {
-    Integer OUT_OF_BOUNDS_INDEX = -12;
+        List<Track> addList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .playlistTrack(PlaylistTrack.builder().build())
-            .playlistTrack(PlaylistTrack.builder().build())
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(2)
-            .deleted(false)
-            .duration(120.00f)
-            .build();
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    /* Configure mocks */
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        /* Assertions */
+        assertThrows(
+                PlaylistException.class,
+                /* Actual Call */
+                () -> playlistService.addTracks(PLAYLIST_UUID, addList, OUT_OF_BOUNDS_INDEX));
 
-    /* Assertions */
-    assertThrows(
-        PlaylistException.class,
-        /* Actual Call */
-        () ->
-            playlistService.addTracks(PLAYLIST_UUID, Collections.emptyList(), OUT_OF_BOUNDS_INDEX));
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+    /*
+    Verify: When track added to playlist, playlist duration is updated respectively
+     */
+    @Test
+    public void addTracksUpdatesPlaylistDurationWhenNewTrackAdded() {
+        Integer ADD_TRACK_TO_INDEX = 1;
+        Integer TRACK_ID_ONE = 20;
+        Integer TRACK_ID_TWO = 21;
+        Float TRACK_DURATION_ONE = 60.00f;
+        Float TRACK_DURATION_TWO = 120.00f;
 
-  /*
-  Verify: When track added to playlist, playlist duration is updated respectively
-   */
-  @Test
-  public void addTracksUpdatesPlaylistDurationWhenNewTrackAdded() {
-    Integer ADD_TRACK_TO_INDEX = 1;
-    Integer TRACK_ID_ONE = 20;
-    Integer TRACK_ID_TWO = 21;
-    Float TRACK_DURATION_ONE = 60.00f;
-    Float TRACK_DURATION_TWO = 120.00f;
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(1)
+                        .deleted(false)
+                        .duration(TRACK_DURATION_ONE)
+                        .build();
 
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(1)
-            .deleted(false)
-            .duration(TRACK_DURATION_ONE)
-            .build();
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .id(10)
+                                        .trackId(TRACK_ID_ONE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(
+                                                Track.builder()
+                                                        .id(TRACK_ID_ONE)
+                                                        .duration(TRACK_DURATION_ONE)
+                                                        .build())
+                                        .playlist(playlist)
+                                        .build()));
 
-    Set<PlaylistTrack> playlistTracks =
-        new HashSet<>(
-            Arrays.asList(
-                PlaylistTrack.builder()
-                    .id(10)
-                    .trackId(TRACK_ID_ONE)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_ONE).duration(TRACK_DURATION_ONE).build())
-                    .playlist(playlist)
-                    .build()));
+        playlist.setPlaylistTracks(playlistTracks);
 
-    playlist.setPlaylistTracks(playlistTracks);
+        List<Track> addList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID_TWO)
+                                .duration(TRACK_DURATION_TWO)
+                                .title(TRACK_TITLE)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    List<Track> addList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID_TWO)
-                .duration(TRACK_DURATION_TWO)
-                .title(TRACK_TITLE)
-                .artistId(ARTIST_ID)
-                .build());
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    /* Configure mocks */
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        /* Actual calls */
+        playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TRACK_TO_INDEX);
 
-    /* Actual calls */
-    playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TRACK_TO_INDEX);
+        /* Assertions */
+        assertTrue(playlist.getDuration().equals(TRACK_DURATION_ONE + TRACK_DURATION_TWO));
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 
-    /* Assertions */
-    assertTrue(playlist.getDuration().equals(TRACK_DURATION_ONE + TRACK_DURATION_TWO));
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+    /*
+    Verify: When index is somewhere in middle of playlist tracks list , track is added at that middle index
+     */
+    @Test
+    public void addTracksAddsTrackAtSpecifiedIndexWhenToIndexIsAnInBetweenIndex() {
+        Integer ADD_TO_INDEX = 1;
+        Integer TRACK_ID_ONE = 1;
+        Integer TRACK_ID_TWO = 2;
 
-  /*
-  Verify: When index is somewhere in middle of playlist tracks list , track is added at that middle index
-   */
-  @Test
-  public void addTracksAddsTrackAtSpecifiedIndexWhenToIndexIsAnInBetweenIndex() {
-    Integer ADD_TO_INDEX = 1;
-    Integer TRACK_ID_ONE = 1;
-    Integer TRACK_ID_TWO = 2;
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(2)
+                        .deleted(false)
+                        .duration(120.00f)
+                        .build();
 
-    Playlist playlist =
-        Playlist.builder()
-            .id(1)
-            .uuid(PLAYLIST_UUID)
-            .playListName(PLAYLIST_NAME)
-            .registeredDate(PLAYLIST_DATE)
-            .lastUpdated(PLAYLIST_DATE)
-            .nrOfTracks(2)
-            .deleted(false)
-            .duration(120.00f)
-            .build();
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .index(0)
+                                        .id(10)
+                                        .trackId(TRACK_ID_ONE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(
+                                                Track.builder()
+                                                        .id(TRACK_ID_ONE)
+                                                        .duration(60.00f)
+                                                        .build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .index(1)
+                                        .id(11)
+                                        .trackId(TRACK_ID_TWO)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(
+                                                Track.builder()
+                                                        .id(TRACK_ID_TWO)
+                                                        .duration(110.00f)
+                                                        .build())
+                                        .playlist(playlist)
+                                        .build()));
 
-    Set<PlaylistTrack> playlistTracks =
-        new HashSet<>(
-            Arrays.asList(
-                PlaylistTrack.builder()
-                    .index(0)
-                    .id(10)
-                    .trackId(TRACK_ID_ONE)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_ONE).duration(60.00f).build())
-                    .playlist(playlist)
-                    .build(),
-                PlaylistTrack.builder()
-                    .index(1)
-                    .id(11)
-                    .trackId(TRACK_ID_TWO)
-                    .dateAdded(CURRENT_DATE)
-                    .track(Track.builder().id(TRACK_ID_TWO).duration(110.00f).build())
-                    .playlist(playlist)
-                    .build()));
+        playlist.setPlaylistTracks(playlistTracks);
 
-    playlist.setPlaylistTracks(playlistTracks);
+        List<Track> addList =
+                Collections.singletonList(
+                        Track.builder()
+                                .id(TRACK_ID)
+                                .title(TRACK_TITLE)
+                                .duration(60.00f)
+                                .artistId(ARTIST_ID)
+                                .build());
 
-    List<Track> addList =
-        Collections.singletonList(
-            Track.builder()
-                .id(TRACK_ID)
-                .title(TRACK_TITLE)
-                .duration(60.00f)
-                .artistId(ARTIST_ID)
-                .build());
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
 
-    /* Configure mocks */
-    Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
-        .thenReturn(Optional.of(playlist));
+        /* Actual calls */
+        List<PlaylistTrack> addedTracks =
+                playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TO_INDEX);
 
-    /* Actual calls */
-    List<PlaylistTrack> addedTracks =
-        playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TO_INDEX);
-
-    /* Assertions */
-    assertTrue(1 == addedTracks.get(0).getIndex());
-    Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
-  }
+        /* Assertions */
+        assertTrue(1 == addedTracks.get(0).getIndex());
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
 }
