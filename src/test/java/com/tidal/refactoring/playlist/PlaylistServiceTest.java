@@ -434,15 +434,6 @@ public class PlaylistServiceTest {
 
     @Test
     public void removeTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
-        List<Track> trackList =
-                Collections.singletonList(
-                        Track.builder()
-                                .id(TRACK_ID)
-                                .title(TRACK_TITLE)
-                                .duration(60.00f)
-                                .artistId(ARTIST_ID)
-                                .build());
-
         Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
                 .thenReturn(Optional.empty());
 
