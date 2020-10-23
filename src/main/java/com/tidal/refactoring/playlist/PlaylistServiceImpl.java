@@ -6,33 +6,32 @@ import com.tidal.refactoring.playlist.data.Track;
 import com.tidal.refactoring.playlist.exception.PlaylistException;
 import com.tidal.refactoring.playlist.exception.ValidationException;
 import com.tidal.refactoring.playlist.interfaces.PlaylistRepository;
+import com.tidal.refactoring.playlist.interfaces.PlaylistService;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
-import org.apache.commons.collections4.list.SetUniqueList;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class PlaylistService {
+public class PlaylistServiceImpl implements PlaylistService {
     private static final Integer PLAYLIST_MAX_SIZE = 500;
 
     private PlaylistRepository playlistRepository;
 
     private BusinessUtils businessUtils;
 
-    public PlaylistService(PlaylistRepository playlistRepository) {
+    public PlaylistServiceImpl(PlaylistRepository playlistRepository) {
         this.playlistRepository = playlistRepository;
         this.businessUtils = new BusinessUtils();
     }
 
-    /** Add tracks to the index */
-    public List<PlaylistTrack> addTracks(String uuid, List<Track> tracksToAdd, int toIndex)
+    /** @see PlaylistService#addTracks(String, List, int) */
+    public List<PlaylistTrack> addTracks(String uuid, List<Track> tracksToAdd, int insertionIndex)
             throws PlaylistException {
 
-        if (StringUtils.isEmpty(uuid))
+        /* Validations */
+        if (StringUtils.isBlank(uuid))
             throw new ValidationException("uuid must not be null or empty");
 
         if (CollectionUtils.isEmpty(tracksToAdd))
@@ -49,20 +48,22 @@ public class PlaylistService {
                     "Playlist cannot have more than " + PLAYLIST_MAX_SIZE + " tracks");
         }
 
-        /* The index is out of bounds, put it in the end of the list */
+        /* The index is higher than size, put it in the end of the list */
         int size = playList.getNrOfTracks();
-        if (toIndex > size || toIndex == -1) {
-            toIndex = size;
+        if (insertionIndex > size || insertionIndex == -1) {
+            insertionIndex = size;
         }
 
-        if (!validateIndexes(toIndex, playList.getNrOfTracks())) {
-            throw new PlaylistException("toIndex is out of bounds");
+        if (!isValidIndex(insertionIndex, playList.getNrOfTracks())) {
+            throw new PlaylistException("insertionIndex " + insertionIndex + "is out of bounds");
         }
 
+        /* Sorted list of tracks */
         List<PlaylistTrack> original =
                 new ArrayList<>(SetUtils.emptyIfNull(playList.getPlaylistTracks()));
         Collections.sort(original);
 
+        /* Add tracks to the playlist tracks based on index */
         List<PlaylistTrack> addedTracks = new ArrayList<>(tracksToAdd.size());
         for (Track track : tracksToAdd) {
             PlaylistTrack playlistTrack =
@@ -74,13 +75,13 @@ public class PlaylistService {
                             .build();
 
             playList.setDuration(addTrackDurationToPlaylist(playList, track));
-            original.add(toIndex, playlistTrack);
+            original.add(insertionIndex, playlistTrack);
             addedTracks.add(playlistTrack);
-            toIndex++;
+            insertionIndex++;
         }
 
         /* Reassign indices to the tracks in playlist */
-        Integer indexInPlaylist = 0;
+        int indexInPlaylist = 0;
         for (PlaylistTrack track : original) {
             track.setIndex(indexInPlaylist++);
         }
@@ -91,18 +92,12 @@ public class PlaylistService {
         return addedTracks;
     }
 
-    /**
-     * Remove the tracks from the playlist located at the sent indexes
-     *
-     * @param uuid identifies the playlist
-     * @param indexes indexes of the tracks in the playlist that need to be removed
-     * @return the tracks in the playlist after the removal
-     * @throws PlaylistException
-     */
+    /** @see PlaylistService#removeTracks(String, List) */
     public List<PlaylistTrack> removeTracks(String uuid, List<Integer> indexes)
             throws PlaylistException {
 
-        if (StringUtils.isEmpty(uuid))
+        /* Validations */
+        if (StringUtils.isBlank(uuid))
             throw new ValidationException("uuid must not be null or empty");
 
         if (CollectionUtils.isEmpty(indexes))
@@ -116,14 +111,14 @@ public class PlaylistService {
         /* Validate indices */
         indexes.forEach(
                 index -> {
-                    if (!validateIndexes(index, playList.getNrOfTracks())) {
-                        throw new PlaylistException("Index out of bounds");
+                    if (!isValidIndex(index, playList.getNrOfTracks())) {
+                        throw new PlaylistException("Index: " + index + "out of bounds");
                     }
                 });
 
         Set<PlaylistTrack> tracksOfPlaylist = SetUtils.emptyIfNull(playList.getPlaylistTracks());
 
-        /* Gather all tracks to be removed. Time complexity O(N*W) */
+        /* Gather all tracks to be removed. Time complexity O(N * W) */
         Set<PlaylistTrack> tracksToRemove =
                 playList.getPlaylistTracks().stream()
                         .filter(playlistTrack -> indexes.contains(playlistTrack.getIndex()))
@@ -141,19 +136,21 @@ public class PlaylistService {
         /* sorting the tracks of playlist. Overall nlog(n) complexity */
         Set<PlaylistTrack> sortedTracks = new TreeSet<>(tracksOfPlaylist);
 
-        /* Assign indices again. O(n) */
+        /* Re-assign indices: O(n) */
         Integer plIndex = 0;
         for (PlaylistTrack plTrack : sortedTracks) {
             plTrack.setIndex(plIndex++);
         }
 
+        /* In fairly large sets, assigning new set is faster than clearing and adding into existing */
         playList.setPlaylistTracks(new HashSet<>(sortedTracks));
         playList.setNrOfTracks(tracksOfPlaylist.size());
 
+        /* Suggestion: Method return type should be changed from List to Set */
         return new ArrayList<>(sortedTracks);
     }
 
-    private boolean validateIndexes(int toIndex, int length) {
+    private boolean isValidIndex(int toIndex, int length) {
         return toIndex >= 0 && toIndex <= length;
     }
 

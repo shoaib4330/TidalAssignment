@@ -4,10 +4,10 @@ import com.tidal.refactoring.playlist.data.Playlist;
 import com.tidal.refactoring.playlist.data.PlaylistTrack;
 import com.tidal.refactoring.playlist.data.Track;
 import com.tidal.refactoring.playlist.exception.PlaylistException;
+import com.tidal.refactoring.playlist.exception.ValidationException;
 import com.tidal.refactoring.playlist.interfaces.PlaylistRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.platform.commons.util.CollectionUtils;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -16,23 +16,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 
-/* Business Rules:
-- Playlist by UUID should exist in the database, else throws exception
-- Playlist cannot contain more than 500 tracks
-- If toIndex:
-        - is -1, adds tracks to the end of the list
-        - is > playlistSize(), adds tracks to the end of the list
-- If validateIndexes(a, b) == false, throws PlaylistException
-- Playlist should have updated duration
-- Verify the indexes of newly added tracks
- */
-
 @ExtendWith(MockitoExtension.class)
-public class PlaylistServiceTest {
+public class PlaylistServiceImplTest {
 
     private static final String PLAYLIST_UUID = "ea23cd43ekdo30cm54jxvf93";
     private static final String PLAYLIST_NAME = "The Test Playlist Name";
@@ -45,12 +33,30 @@ public class PlaylistServiceTest {
     private static final String TRACK_TITLE = "Track 1";
     private static final Integer ARTIST_ID = 1;
 
-    @InjectMocks private PlaylistService playlistService;
+    @InjectMocks private PlaylistServiceImpl playlistServiceImpl;
 
     @Mock private PlaylistRepository playlistRepository;
 
     @Test
-    public void addTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
+    public void addTracksShouldThrowValidationExceptionWhenUUIDIsEmpty() {
+        assertThrows(
+                ValidationException.class,
+                () -> playlistServiceImpl.addTracks("", Collections.emptyList(), 0));
+
+        Mockito.verify(playlistRepository, Mockito.never()).getPlaylistByUUID(anyString());
+    }
+
+    @Test
+    public void addTracksShouldThrowValidationExceptionWhenTracksToAddAreEmpty() {
+        assertThrows(
+                ValidationException.class,
+                () -> playlistServiceImpl.addTracks(PLAYLIST_UUID, Collections.emptyList(), 0));
+
+        Mockito.verify(playlistRepository, Mockito.never()).getPlaylistByUUID(anyString());
+    }
+
+    @Test
+    public void addTracksShouldThrowPlaylistExceptionWhenPlaylistByUUIDNotFound() {
         List<Track> trackList =
                 Collections.singletonList(
                         Track.builder()
@@ -65,7 +71,7 @@ public class PlaylistServiceTest {
 
         assertThrows(
                 PlaylistException.class,
-                () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
+                () -> playlistServiceImpl.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
     }
 
     @Test
@@ -97,7 +103,7 @@ public class PlaylistServiceTest {
 
         assertThrows(
                 PlaylistException.class,
-                () -> playlistService.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
+                () -> playlistServiceImpl.addTracks(PLAYLIST_UUID, trackList, TO_INDEX));
 
         Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
     }
@@ -111,7 +117,7 @@ public class PlaylistServiceTest {
                 .thenReturn(Optional.of(Playlist.builder().build()));
 
         List<PlaylistTrack> playlistTracks =
-                playlistService.addTracks(UUID.randomUUID().toString(), trackList, 5);
+                playlistServiceImpl.addTracks(UUID.randomUUID().toString(), trackList, 5);
 
         assertTrue(playlistTracks.size() > 0);
     }
@@ -174,7 +180,7 @@ public class PlaylistServiceTest {
 
         /* Actual calls */
         List<PlaylistTrack> addedTracks =
-                playlistService.addTracks(PLAYLIST_UUID, addList, MINUS_ONE_TO_INDEX);
+                playlistServiceImpl.addTracks(PLAYLIST_UUID, addList, MINUS_ONE_TO_INDEX);
 
         /* Assertions */
         assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
@@ -239,7 +245,7 @@ public class PlaylistServiceTest {
 
         /* Actual calls */
         List<PlaylistTrack> addedTracks =
-                playlistService.addTracks(PLAYLIST_UUID, addList, HIGH_TO_INDEX);
+                playlistServiceImpl.addTracks(PLAYLIST_UUID, addList, HIGH_TO_INDEX);
 
         /* Assertions */
         assertTrue(playlist.getNrOfTracks() - 1 == addedTracks.get(0).getIndex());
@@ -284,7 +290,7 @@ public class PlaylistServiceTest {
         assertThrows(
                 PlaylistException.class,
                 /* Actual Call */
-                () -> playlistService.addTracks(PLAYLIST_UUID, addList, OUT_OF_BOUNDS_INDEX));
+                () -> playlistServiceImpl.addTracks(PLAYLIST_UUID, addList, OUT_OF_BOUNDS_INDEX));
 
         Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
     }
@@ -343,7 +349,7 @@ public class PlaylistServiceTest {
                 .thenReturn(Optional.of(playlist));
 
         /* Actual calls */
-        playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TRACK_TO_INDEX);
+        playlistServiceImpl.addTracks(PLAYLIST_UUID, addList, ADD_TRACK_TO_INDEX);
 
         /* Assertions */
         assertTrue(playlist.getDuration().equals(TRACK_DURATION_ONE + TRACK_DURATION_TWO));
@@ -416,29 +422,238 @@ public class PlaylistServiceTest {
 
         /* Actual calls */
         List<PlaylistTrack> addedTracks =
-                playlistService.addTracks(PLAYLIST_UUID, addList, ADD_TO_INDEX);
+                playlistServiceImpl.addTracks(PLAYLIST_UUID, addList, ADD_TO_INDEX);
 
         /* Assertions */
         assertTrue(ADD_TO_INDEX == addedTracks.get(0).getIndex());
         Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
     }
 
-    /* ############ RemoveTracks Unit Tests ########
-     * ###############################################
-     * #################################################
-     * */
-//    @Test
-//    public void removeTracksRemovesTheTrackFromThePlaylist() {
-//        return;
-//    }
+    /* ---------------------------- RemoveTracks Unit Tests --------------------------------*/
+    @Test
+    public void removeTracksShouldThrowValidationExceptionWhenUUIDIsEmpty() {
+        assertThrows(
+                ValidationException.class,
+                () -> playlistServiceImpl.removeTracks("", Collections.singletonList(1)));
+
+        Mockito.verify(playlistRepository, Mockito.never()).getPlaylistByUUID(anyString());
+    }
 
     @Test
-    public void removeTracksShouldThrowExceptionWhenPlaylistByUUIDNotFound() {
+    public void removeTracksShouldThrowValidationExceptionWhenIndexesAreEmpty() {
+        assertThrows(
+                ValidationException.class,
+                () -> playlistServiceImpl.removeTracks(PLAYLIST_UUID, Collections.emptyList()));
+
+        Mockito.verify(playlistRepository, Mockito.never()).getPlaylistByUUID(anyString());
+    }
+
+    @Test
+    public void removeTracksShouldThrowPlaylistExceptionWhenPlaylistByUUIDNotFound() {
         Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
                 .thenReturn(Optional.empty());
 
         assertThrows(
                 PlaylistException.class,
-                () -> playlistService.removeTracks(PLAYLIST_UUID, Collections.singletonList(1)));
+                () ->
+                        playlistServiceImpl.removeTracks(
+                                PLAYLIST_UUID, Collections.singletonList(1)));
+    }
+
+    @Test
+    public void removeTracksShouldThrowPlaylistExceptionWhenIndexIsOutOfBounds() {
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.of(Playlist.builder().build()));
+
+        assertThrows(
+                PlaylistException.class,
+                () ->
+                        playlistServiceImpl.removeTracks(
+                                PLAYLIST_UUID, Collections.singletonList(-1)));
+    }
+
+    @Test
+    public void removeTracksRemovesTrackFromSpecifiedPlaylistIndexWhenIndexIsAnInBetweenIndex() {
+        List<Integer> REMOVAL_INDEX = Collections.singletonList(1);
+        int TRACK_ID_ONE = 1;
+        int EXPECTED_TRACK_TO_REMOVE = 2;
+        int TRACK_ID_THREE = 3;
+
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(3)
+                        .build();
+
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .index(0)
+                                        .id(1)
+                                        .trackId(TRACK_ID_ONE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_ONE).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .index(1)
+                                        .id(2)
+                                        .trackId(EXPECTED_TRACK_TO_REMOVE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(EXPECTED_TRACK_TO_REMOVE).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .index(2)
+                                        .id(3)
+                                        .trackId(TRACK_ID_THREE)
+                                        .dateAdded(CURRENT_DATE)
+                                        .track(Track.builder().id(TRACK_ID_THREE).build())
+                                        .playlist(playlist)
+                                        .build()));
+
+        playlist.setPlaylistTracks(playlistTracks);
+
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.of(playlist));
+
+        /* Action */
+        List<PlaylistTrack> result = playlistServiceImpl.removeTracks(PLAYLIST_UUID, REMOVAL_INDEX);
+
+        /* Assertions */
+        assertTrue(result.size() == 2);
+        assertFalse(
+                result.stream()
+                        .anyMatch(
+                                playlistTrack ->
+                                        playlistTrack.getId().equals(EXPECTED_TRACK_TO_REMOVE)));
+    }
+
+    @Test
+    public void removeTracksUpdatesPlaylistDurationWhenTrackIsRemoved() {
+        Integer TRACK_REMOVE_INDEX = 1;
+        Integer TRACK_ID_ONE = 1;
+        Integer TRACK_ID_TWO = 2;
+        Float TRACK_DURATION_ONE = 60.00f;
+        Float TRACK_DURATION_TWO = 120.00f;
+
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(1)
+                        .deleted(false)
+                        .duration(TRACK_DURATION_ONE)
+                        .build();
+
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .id(1)
+                                        .trackId(TRACK_ID_ONE)
+                                        .track(
+                                                Track.builder()
+                                                        .id(TRACK_ID_ONE)
+                                                        .duration(TRACK_DURATION_ONE)
+                                                        .build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .id(2)
+                                        .trackId(TRACK_ID_TWO)
+                                        .track(
+                                                Track.builder()
+                                                        .id(TRACK_ID_TWO)
+                                                        .duration(TRACK_DURATION_TWO)
+                                                        .build())
+                                        .playlist(playlist)
+                                        .build()));
+
+        playlist.setPlaylistTracks(playlistTracks);
+
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(PLAYLIST_UUID))
+                .thenReturn(Optional.of(playlist));
+
+        /* Actual calls */
+        playlistServiceImpl.removeTracks(
+                PLAYLIST_UUID, Collections.singletonList(TRACK_REMOVE_INDEX));
+
+        /* Assertions */
+        Float expectedDuration = TRACK_DURATION_ONE;
+        Float actualDuration = playlist.getDuration();
+
+        assertTrue(expectedDuration.equals(actualDuration));
+        Mockito.verify(playlistRepository, Mockito.times(1)).getPlaylistByUUID(PLAYLIST_UUID);
+    }
+
+    @Test
+    public void removeTracksReIndexesTracksWhenATrackIsRemoved() {
+        int TRACK_ID_ONE = 1;
+        int TRACK_ID_TWO = 2;
+        int TRACK_ID_THREE = 3;
+
+        int REMOVAL_INDEX = 2;
+
+        Playlist playlist =
+                Playlist.builder()
+                        .id(1)
+                        .uuid(PLAYLIST_UUID)
+                        .playListName(PLAYLIST_NAME)
+                        .registeredDate(PLAYLIST_DATE)
+                        .lastUpdated(PLAYLIST_DATE)
+                        .nrOfTracks(3)
+                        .build();
+
+        Set<PlaylistTrack> playlistTracks =
+                new HashSet<>(
+                        Arrays.asList(
+                                PlaylistTrack.builder()
+                                        .index(0)
+                                        .id(1)
+                                        .trackId(TRACK_ID_ONE)
+                                        .track(Track.builder().id(TRACK_ID_ONE).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .index(1)
+                                        .id(2)
+                                        .trackId(TRACK_ID_TWO)
+                                        .track(Track.builder().id(TRACK_ID_TWO).build())
+                                        .playlist(playlist)
+                                        .build(),
+                                PlaylistTrack.builder()
+                                        .index(2)
+                                        .id(3)
+                                        .trackId(TRACK_ID_THREE)
+                                        .track(Track.builder().id(TRACK_ID_THREE).build())
+                                        .playlist(playlist)
+                                        .build()));
+
+        playlist.setPlaylistTracks(playlistTracks);
+
+        /* Configure mocks */
+        Mockito.when(playlistRepository.getPlaylistByUUID(anyString()))
+                .thenReturn(Optional.of(playlist));
+
+        /* Action */
+        List<PlaylistTrack> result =
+                playlistServiceImpl.removeTracks(
+                        PLAYLIST_UUID, Collections.singletonList(REMOVAL_INDEX));
+
+        /* Assertions */
+        int expectedReassignedIndex = 1;
+        int actualReassignedIndex = result.get(1).getIndex();
+        assertTrue(expectedReassignedIndex == actualReassignedIndex);
     }
 }
