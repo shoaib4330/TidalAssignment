@@ -70,7 +70,10 @@ public class PlaylistServiceImpl implements PlaylistService {
                     PlaylistTrack.builder()
                             .track(track)
                             .playlist(playList)
-                            .dateAdded(businessUtils.currentDate())
+                            .dateAdded(
+                                    businessUtils
+                                            .currentDate()) // code uses utility to get date for
+                                                            // better testing purposes
                             .trackId(track.getId())
                             .build();
 
