@@ -1,3 +1,18 @@
+# Assignment Details
+Please execute:
+`mvn clean install` to build the project and execute the tests (unit tests) for the project.
+- Added lombok to remove boiler plate code from entity classes.
+- Added Proper Error Messages and Threw Exceptions where needed.
+- Added Validations to method arguments.
+- Added Unit Tests for addTracks(String, List, int) service method, that verify all business aspects of that method, and also verify the interactions.
+- Refactored addTracks() to: 
+    - Add Validations
+    - Remove redundancy
+    - Improve readability
+    - Improve time complexity
+- Implemented RemoveTracks() with Validations, in Readable, Efficient and time efficient manner.
+- Added Unit Tests for removeTracks(String) service method, that verify all business aspects of that method, and also verify the interactions.
+
 # Tidal recruiting refactoring test
 
 ###### Please do not share this test or your answers on github or any other place where it can be found by a third party. 
