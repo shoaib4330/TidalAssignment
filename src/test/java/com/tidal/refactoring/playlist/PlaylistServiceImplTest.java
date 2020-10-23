@@ -37,6 +37,9 @@ public class PlaylistServiceImplTest {
 
     @Mock private PlaylistRepository playlistRepository;
 
+    /* Verifying non-empty validation constraint, UUID has to be non-empty
+     * - There is no point testing for all (null, empty, white-spaces) scenarios, since commons' `isBlank()`
+     * implicitly does that*/
     @Test
     public void addTracksShouldThrowValidationExceptionWhenUUIDIsEmpty() {
         assertThrows(
@@ -430,6 +433,9 @@ public class PlaylistServiceImplTest {
     }
 
     /* ---------------------------- RemoveTracks Unit Tests --------------------------------*/
+    /* Verifying non-empty validation constraint, UUID has to be non-empty
+     * - There is no point testing for all (null, empty, white-spaces) scenarios, since commons' `isBlank()`
+     * implicitly does that*/
     @Test
     public void removeTracksShouldThrowValidationExceptionWhenUUIDIsEmpty() {
         assertThrows(
