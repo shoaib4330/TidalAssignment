@@ -1,6 +1,7 @@
 # Assignment Details
 Please execute:
 `mvn clean install` to build the project and execute the tests (unit tests) for the project.
+Comments within code are also added. Following additions and changes are done to the assignment.
 - Added lombok to remove boiler plate code from entity classes.
 - Added Proper Error Messages and Threw Exceptions where needed.
 - Added Validations to method arguments.
